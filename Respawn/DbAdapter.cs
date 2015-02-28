@@ -178,5 +178,83 @@ where 1=1";
                 return builder.ToString();
             }
         }
+
+        private class OracleDbAdapter : IDbAdapter
+        {
+            public string BuildTableCommandText(Checkpoint checkpoint)
+            {
+                string commandText = @"
+select OWNER, TABLE_NAME
+from ALL_TABLES"
+        ;
+
+                int position = 0;
+                if (checkpoint.TablesToIgnore.Any())
+                {
+                    var args = string.Join(",", checkpoint.TablesToIgnore.Select((s, i) => "{" + i.ToString() + "}").ToArray());
+
+                    commandText += " AND TABLE_NAME NOT IN (" + args + ")";
+                    position += checkpoint.TablesToIgnore.Length;
+                }
+                if (checkpoint.SchemasToExclude.Any())
+                {
+                    var args = string.Join(",", checkpoint.SchemasToExclude.Select((s, i) => "{" + (i + position).ToString() + "}").ToArray());
+
+                    commandText += " AND OWNER NOT IN (" + args + ")";
+                }
+                else if (checkpoint.SchemasToInclude.Any())
+                {
+                    var args = string.Join(",", checkpoint.SchemasToInclude.Select((s, i) => "{" + (i + position).ToString() + "}").ToArray());
+
+                    commandText += " AND OWNER IN (" + args + ")";
+                }
+
+                return commandText;
+            }
+
+            public string BuildRelationshipCommandText(Checkpoint checkpoint)
+            {
+                string commandText = @"
+select ctu.table_schema, ctu.table_name, tc.table_schema, tc.table_name
+from INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+inner join INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE ctu ON rc.constraint_name = ctu.constraint_name
+inner join INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc ON rc.constraint_name = tc.constraint_name
+where 1=1";
+
+                int position = 0;
+                if (checkpoint.TablesToIgnore.Any())
+                {
+                    var args = string.Join(",", checkpoint.TablesToIgnore.Select((s, i) => "{" + i.ToString() + "}").ToArray());
+
+                    commandText += " AND tc.OWNER NOT IN (" + args + ")";
+                    position += checkpoint.TablesToIgnore.Length;
+                }
+                if (checkpoint.SchemasToExclude.Any())
+                {
+                    var args = string.Join(",", checkpoint.SchemasToExclude.Select((s, i) => "{" + (i + position).ToString() + "}").ToArray());
+
+                    commandText += " AND tc.OWNER NOT IN (" + args + ")";
+                }
+                else if (checkpoint.SchemasToInclude.Any())
+                {
+                    var args = string.Join(",", checkpoint.SchemasToInclude.Select((s, i) => "{" + (i + position).ToString() + "}").ToArray());
+
+                    commandText += " AND tc.OWNER IN (" + args + ")";
+                }
+
+                return commandText;
+            }
+
+            public string BuildDeleteCommandText(IEnumerable<string> tablesToDelete)
+            {
+                var builder = new StringBuilder();
+
+                foreach (var tableName in tablesToDelete)
+                {
+                    builder.Append(string.Format("truncate table {0} cascade;\r\n", tableName));
+                }
+                return builder.ToString();
+            }
+        }
     }
 }
