@@ -15,8 +15,9 @@
     {
         public static readonly IDbAdapter SqlServer = new SqlServerDbAdapter();
         public static readonly IDbAdapter Postgres = new PostgresDbAdapter();
+		public static readonly IDbAdapter Oracle = new OracleDbAdapter();
 
-        private class SqlServerDbAdapter : IDbAdapter
+		private class SqlServerDbAdapter : IDbAdapter
         {
             public string BuildTableCommandText(Checkpoint checkpoint)
             {
