@@ -211,24 +211,22 @@ where 1=1 "
                     commandText += " AND OWNER IN (" + args + ")";
                 }
 
-                return commandText;
+                return commandText += ";";
             }
 
             public string BuildRelationshipCommandText(Checkpoint checkpoint)
             {
                 string commandText = @"
-select ctu.table_schema, ctu.table_name, tc.table_schema, tc.table_name
-from INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
-inner join INFORMATION_SCHEMA.CONSTRAINT_TABLE_USAGE ctu ON rc.constraint_name = ctu.constraint_name
-inner join INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc ON rc.constraint_name = tc.constraint_name
-where 1=1";
+select a.table_name,a.constraint_name,b.table_name,a.r_constraint_name from ALL_CONSTRAINTS     a
+         inner join all_constraints b on a.r_constraint_name=b.constraint_name 
+         where a.constraint_type in ('P','R')";
 
                 int position = 0;
                 if (checkpoint.TablesToIgnore.Any())
                 {
                     var args = string.Join(",", checkpoint.TablesToIgnore.Select((s, i) => "{" + i.ToString() + "}").ToArray());
 
-                    commandText += " AND tc.OWNER NOT IN (" + args + ")";
+                    commandText += " AND tc.TABLE_NAME NOT IN (" + args + ")";
                     position += checkpoint.TablesToIgnore.Length;
                 }
                 if (checkpoint.SchemasToExclude.Any())
@@ -244,7 +242,7 @@ where 1=1";
                     commandText += " AND tc.OWNER IN (" + args + ")";
                 }
 
-                return commandText;
+                return commandText += ");";
             }
 
             public string BuildDeleteCommandText(IEnumerable<string> tablesToDelete)
@@ -253,8 +251,10 @@ where 1=1";
 
                 foreach (var tableName in tablesToDelete)
                 {
-                    builder.Append(string.Format("truncate table {0} cascade;\r\n", tableName));
+             
+                    builder.Append(string.Format("truncate from {0};\r\n", tableName));
                 }
+                builder.Append("commit;");
                 return builder.ToString();
             }
         }
