@@ -186,7 +186,8 @@ where 1=1";
             {
                 string commandText = @"
 select OWNER, TABLE_NAME
-from ALL_TABLES"
+from ALL_TABLES
+where 1=1 "
         ;
 
                 int position = 0;
