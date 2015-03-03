@@ -217,8 +217,9 @@ where 1=1 "
             public string BuildRelationshipCommandText(Checkpoint checkpoint)
             {
                 string commandText = @"
-select a.table_name,a.constraint_name,b.table_name,a.r_constraint_name from ALL_CONSTRAINTS     a
-         inner join all_constraints b on a.r_constraint_name=b.constraint_name 
+select a.owner as table_schema,a.table_name,b.owner as table_schema ,b.table_name
+from all_CONSTRAINTS     a
+         inner join all_CONSTRAINTS b on a.r_constraint_name=b.constraint_name 
          where a.constraint_type in ('P','R')";
 
                 int position = 0;

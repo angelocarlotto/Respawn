@@ -80,7 +80,7 @@
 
 			var checkpoint = new Checkpoint
 			{
-				DbAdapter = DbAdapter.Postgres,
+				DbAdapter = DbAdapter.Oracle,
 				SchemasToInclude = new[] { _createdUser },
 				TablesToIgnore = new[] { "foo" }
 			};
