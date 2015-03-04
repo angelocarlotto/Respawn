@@ -211,7 +211,7 @@ where 1=1 "
                     commandText += " AND OWNER IN (" + args + ")";
                 }
 
-                return commandText += ";";
+                return commandText;
             }
 
             public string BuildRelationshipCommandText(Checkpoint checkpoint)
@@ -227,23 +227,23 @@ from all_CONSTRAINTS     a
                 {
                     var args = string.Join(",", checkpoint.TablesToIgnore.Select((s, i) => "{" + i.ToString() + "}").ToArray());
 
-                    commandText += " AND tc.TABLE_NAME NOT IN (" + args + ")";
+                    commandText += " AND a.TABLE_NAME NOT IN (" + args + ")";
                     position += checkpoint.TablesToIgnore.Length;
                 }
                 if (checkpoint.SchemasToExclude.Any())
                 {
                     var args = string.Join(",", checkpoint.SchemasToExclude.Select((s, i) => "{" + (i + position).ToString() + "}").ToArray());
 
-                    commandText += " AND tc.OWNER NOT IN (" + args + ")";
+                    commandText += " AND a.OWNER NOT IN (" + args + ")";
                 }
                 else if (checkpoint.SchemasToInclude.Any())
                 {
                     var args = string.Join(",", checkpoint.SchemasToInclude.Select((s, i) => "{" + (i + position).ToString() + "}").ToArray());
 
-                    commandText += " AND tc.OWNER IN (" + args + ")";
+                    commandText += " AND a.OWNER IN (" + args + ")";
                 }
 
-                return commandText += ");";
+                return commandText;
             }
 
             public string BuildDeleteCommandText(IEnumerable<string> tablesToDelete)
@@ -252,10 +252,8 @@ from all_CONSTRAINTS     a
 
                 foreach (var tableName in tablesToDelete)
                 {
-             
-                    builder.Append(string.Format("truncate from {0};\r\n", tableName));
+                    builder.Append(string.Format("truncate table {0} DROP STORAGE\r\n", tableName));
                 }
-                builder.Append("commit;");
                 return builder.ToString();
             }
         }
