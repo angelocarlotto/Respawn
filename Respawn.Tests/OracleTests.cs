@@ -22,25 +22,10 @@
 
 		public OracleTests()
 		{
-			_createdUser = DateTime.Now.ToString("yyyyMMddHHmmss");
-			using (var connection = new OracleConnection("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SID=xe)));User Id=system;Password=123456;"))
-			{
-				connection.Open();
+			_createdUser = Guid.NewGuid().ToString().Substring(0, 8);
+            CreateUser(_createdUser);
 
-				using (var cmd = connection.CreateCommand())
-				{
-					cmd.CommandText = "create user \"" + _createdUser + "\" IDENTIFIED BY 123456";
-					cmd.ExecuteNonQuery();
-					// We need some permissions in order to execute all the test queries
-					cmd.CommandText = "alter user \"" + _createdUser + "\" IDENTIFIED BY 123456 account unlock";
-					cmd.ExecuteNonQuery();
-					cmd.CommandText = "grant connect, resource to \"" + _createdUser + "\" IDENTIFIED BY 123456";
-					cmd.ExecuteNonQuery();
-					cmd.CommandText = "grant create table to \"" + _createdUser + "\" IDENTIFIED BY 123456";
-					cmd.ExecuteNonQuery();
-				}
-			}
-			_connection = new OracleConnection("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SID=xe)));User Id=" + _createdUser + ";Password=123456;");
+            _connection = new OracleConnection("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SID=xe)));User Id=\"" + _createdUser + "\";Password=123456;");
 			_connection.Open();
 
 			_database = new Database(_connection, DatabaseType.OracleManaged);
@@ -92,56 +77,71 @@
 
 		public void ShouldExcludeSchemas()
 		{
-			_database.Execute("create schema a");
-			_database.Execute("create schema b");
-			_database.Execute("create table a.\"foo\" (value int)");
-			_database.Execute("create table b.\"bar\" (value int)");
+            var userA = Guid.NewGuid().ToString().Substring(0, 8);
+            var userB = Guid.NewGuid().ToString().Substring(0, 8);
+            CreateUser(userA);
+            CreateUser(userB);
+            _database.Execute("create table \"" + userA + "\".\"foo\" (value int)");
+			_database.Execute("create table \"" + userB + "\".\"bar\" (value int)");
 
 			for (int i = 0; i < 100; i++)
 			{
-				_database.Execute("INSERT INTO a.\"foo\" VALUES (" + i + ")");
-				_database.Execute("INSERT INTO b.\"bar\" VALUES (" + i + ")");
+				_database.Execute("INSERT INTO \"" + userA + "\".\"foo\" VALUES (" + i + ")");
+				_database.Execute("INSERT INTO \"" + userB + "\".\"bar\" VALUES (" + i + ")");
 			}
 
 			var checkpoint = new Checkpoint
 			{
-				DbAdapter = DbAdapter.Postgres,
-				SchemasToExclude = new[] { "a", "pg_catalog" }
-			};
+                // We must make sure we don't delete all these users that are used by Oracle
+				DbAdapter = DbAdapter.Oracle,
+				SchemasToExclude = new[] { userA, "ANONYMOUS", "APEX_040000", "APEX_PUBLIC_USER", "APPQOSSYS",
+                                            "CTXSYS", "DBSNMP", "DIP", "FLOWS_FILES", "HR", "MDSYS",
+                                            "ORACLE_OCM", "OUTLN", "SYS", "XDB", "XS$NULL", "SYSTEM"}
+            };
 			checkpoint.Reset(_connection);
 
-			_database.ExecuteScalar<int>("SELECT COUNT(1) FROM a.\"foo\"").ShouldBe(100);
-			_database.ExecuteScalar<int>("SELECT COUNT(1) FROM b.\"bar\"").ShouldBe(0);
-		}
+			_database.ExecuteScalar<int>("SELECT COUNT(1) FROM \"" + userA + "\".\"foo\"").ShouldBe(100);
+			_database.ExecuteScalar<int>("SELECT COUNT(1) FROM \"" + userB + "\".\"bar\"").ShouldBe(0);
+
+            // Clean up before leaving
+            DropUser(userA);
+            DropUser(userB);
+        }
 
 		public void ShouldIncludeSchemas()
 		{
-			_database.Execute("create schema a");
-			_database.Execute("create schema b");
-			_database.Execute("create table a.\"foo\" (value int)");
-			_database.Execute("create table b.\"bar\" (value int)");
+            var userA = Guid.NewGuid().ToString().Substring(0, 8);
+            var userB = Guid.NewGuid().ToString().Substring(0, 8);
+            CreateUser(userA);
+            CreateUser(userB);
+            _database.Execute("create table \"" + userA + "\".\"foo\" (value int)");
+            _database.Execute("create table \"" + userB + "\".\"bar\" (value int)");
 
-			for (int i = 0; i < 100; i++)
+            for (int i = 0; i < 100; i++)
 			{
-				_database.Execute("INSERT INTO a.\"foo\" VALUES (" + i + ")");
-				_database.Execute("INSERT INTO b.\"bar\" VALUES (" + i + ")");
-			}
+                _database.Execute("INSERT INTO \"" + userA + "\".\"foo\" VALUES (" + i + ")");
+                _database.Execute("INSERT INTO \"" + userB + "\".\"bar\" VALUES (" + i + ")");
+            }
 
 			var checkpoint = new Checkpoint
 			{
-				DbAdapter = DbAdapter.Postgres,
-				SchemasToInclude = new[] { "b" }
+				DbAdapter = DbAdapter.Oracle,
+				SchemasToInclude = new[] { userB }
 			};
 			checkpoint.Reset(_connection);
 
-			_database.ExecuteScalar<int>("SELECT COUNT(1) FROM a.\"foo\"").ShouldBe(100);
-			_database.ExecuteScalar<int>("SELECT COUNT(1) FROM b.\"bar\"").ShouldBe(0);
-		}
+            _database.ExecuteScalar<int>("SELECT COUNT(1) FROM \"" + userA + "\".\"foo\"").ShouldBe(100);
+            _database.ExecuteScalar<int>("SELECT COUNT(1) FROM \"" + userB + "\".\"bar\"").ShouldBe(0);
+
+            // Clean up before leaving
+            DropUser(userA);
+            DropUser(userB);
+        }
 
 		public void Dispose()
 		{
 			// Clean up our mess before leaving
-			DropUser();
+			DropUser(_createdUser);
 
 			_connection.Close();
 			_connection.Dispose();
@@ -151,7 +151,26 @@
 			_database = null;
 		}
 
-		private void DropUser()
+        private void CreateUser(string userName)
+        {
+            using (var connection = new OracleConnection("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SID=xe)));User Id=system;Password=123456;"))
+            {
+                connection.Open();
+
+                using (var cmd = connection.CreateCommand())
+                {
+                    cmd.CommandText = "create user \"" + userName + "\" IDENTIFIED BY 123456";
+                    cmd.ExecuteNonQuery();
+                    // We need some permissions in order to execute all the test queries
+                    cmd.CommandText = "alter user \"" + userName + "\" IDENTIFIED BY 123456 account unlock";
+                    cmd.ExecuteNonQuery();
+                    cmd.CommandText = "grant all privileges to \"" + userName + "\" IDENTIFIED BY 123456";
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+		private void DropUser(string userName)
 		{
 			using (var connection = new OracleConnection("Data Source=(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SID=xe)));User Id=system;Password=123456;"))
 			{
@@ -160,7 +179,7 @@
 				using (var cmd = connection.CreateCommand())
 				{
 					// First we need to disconnect the user
-					cmd.CommandText = @"SELECT s.sid, s.serial#, s.status, p.spid FROM v$session s, v$process p WHERE s.username = '" + _createdUser + "' AND p.addr(+) = s.paddr";
+					cmd.CommandText = @"SELECT s.sid, s.serial#, s.status, p.spid FROM v$session s, v$process p WHERE s.username = '" + userName + "' AND p.addr(+) = s.paddr";
 
 					var dataReader = cmd.ExecuteReader();
 					if (dataReader.Read())
@@ -168,13 +187,13 @@
 						var sid = dataReader.GetOracleDecimal(0);
 						var serial = dataReader.GetOracleDecimal(1);
 
-						cmd.CommandText = "ALTER SYSTEM KILL SESSION '" + sid + ", " + serial + "'";
-						cmd.ExecuteNonQuery();
+                        cmd.CommandText = "ALTER SYSTEM KILL SESSION '" + sid + ", " + serial + "'";
+                        cmd.ExecuteNonQuery();
+                    }
 
-						cmd.CommandText = "drop user \"" + _createdUser + "\" CASCADE";
-						cmd.ExecuteNonQuery();
-					}
-				}
+                    cmd.CommandText = "drop user \"" + userName + "\" CASCADE";
+                    cmd.ExecuteNonQuery();
+                }
 			}
 		}
 	}
